@@ -1,0 +1,104 @@
+ sso
+
+一、什么是单点登录
+    单点登录（Single Sign On），简称为 SSO，是目前比较流行的企业业务整合的解决方案之一。
+    SSO的定义是在多个应用系统中，用户只需要登录一次就可以访问所有相互信任的应用系统。
+
+二、什么是CAS
+    CAS 是耶鲁大学发起的一个开源项目，旨在为 Web 应用系统提供一种可靠的单点登录方法，CAS 在 2004 年 12 月正式成为 JA-SIG 的一个项目。
+    CAS 具有以下特点：
+        1) 开源的企业级单点登录解决方案 
+        2) CAS Server 为需要独立部署的 Web 应用。 
+        3) CAS Client 支持非常多的客户端(这里指单点登录系统中的各个 Web 应用)
+    CAS 单点登录主要流程：
+        1）访问服务：SSO客户端发送请求访问应用系统提供的服务资源。
+        2）定向认证：SSO客户端会重定向用户请求到SSO服务器。
+        3）用户认证：用户身份认证。
+        4）发放票据：SSO服务器会产生一个随机的Service Ticket。
+        5）验证票据：SSO服务器验证票据Service Ticket的合法性，验证通过后，允许客户端访问服务。
+        6）传输用户信息：SSO服务器验证票据通过后，传输用户认证结果信息给客户端。
+
+三、CAS下载
+    下载地址：https://github.com/apereo/cas
+    下载版本：cas-4.0.0.zip 或者下载新版本踩坑（新版本采用的是gradle）
+
+四、CAS SERVER部署
+    部署Tomcat8：下载部署到本地，http://localhost:8080
+    部署cas.war：部署到webapps，http://localhost:8080/cas，casuser/Mellon
+    修改默认用户名密码：/WEB-INF/deployConfigContext.xml  bean id="primaryAuthenticationHandler"
+    更改CAS SERVER访问端口：
+        1. Tomcat端口修改为8100
+        2. 修改CAS的/WEB-INF/cas.properties:server.name=http://localhost:8100
+        3. 重启测试登录http://localhost:8100/cas
+    去除https验证：（默认使用HTTPS协议，需要申请和购买SSL安全证书）
+        1. 修改/WEB-INF/deployerConfigContext.xml     
+            <bean class="org.jasig.cas.authentication.handler.support.HttpBasedServiceCredentialsAuthenticationHandler"
+            p:httpClient-ref="httpClient" p:requireSecure="false"/>
+        2. 修改/WEB-INF/spring-configuration/ticketGrantingTicketCookieGenerator.xml 
+            <bean id="ticketGrantingTicketCookieGenerator" class="org.jasig.cas.web.support.CookieRetrievingCookieGenerator"
+            p:cookieSecure="false"
+            p:cookieMaxAge="86400"
+            p:cookieName="CASTGC"
+            p:cookiePath="/cas" />
+        3. 修改/WEB-INF/spring-configuration/warnCookieGenerator.xml 
+            <bean id="warnCookieGenerator" class="org.jasig.cas.web.support.CookieRetrievingCookieGenerator"
+            p:cookieSecure="false"
+            p:cookieMaxAge="86400"
+            p:cookieName="CASPRIVACY"
+            p:cookiePath="/cas" />
+
+五、CAS CLIENT搭建两个工程
+    搭建client1和client2，步骤如下：
+        1. 搭建maven web工程
+        2. 修改pom.xml：依赖、插件
+        3. 修改web.xml：监听器、过滤器
+        4. 修改index.jsp：http://localhost:8100/cas/logout
+    两个客户端工程和CAS SERVER进行联通测试：
+        1. 任何一个client工程登录后，另外一个工程也不需要登录
+        2. 任何一个client工程登出后，另外一个工程也已经登出
+    单点登出跳转到指定页：
+        1. 修改/WEB-INF/cas-servlet.xml
+            <bean id="logoutAction" class="org.jasig.cas.web.flow.LogoutAction"
+                p:servicesManager-ref="servicesManager"
+                p:followServiceRedirects="${cas.logout.followServiceRedirects:true}"/>
+        2. 修改index.jsp
+            <a href="http://localhost:8100/cas/logout?service=http://www.mobiletrain.org">登出</a>
+        3. 重启测试
+
+六、CAS SERVER配置数据源（也就是用自己数据库中的用户名和密码登录CAS SERVER）
+
+    1. /WEB-INF/deployerConfigContext.xml添加如下内容：
+
+        <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" 
+            init-method="init" destroy-method="close" p:driverClassName="com.mysql.jdbc.Driver"
+            p:url="jdbc:mysql://localhost:3306/p2p?useUnicode=true&characterEncoding=utf8"
+            p:username="root"
+            p:password="dhcdhc"/>
+        <!--注意MD5加密为32位小写即可-->
+        <bean id="passwordEncoder" class="org.jasig.cas.authentication.handler.DefaultPasswordEncoder"  
+                c:encodingAlgorithm="MD5"  
+                p:characterEncoding="UTF-8" />  
+        <bean id="dbAuthenticationHandler"  
+                class="org.jasig.cas.adaptors.jdbc.QueryDatabaseAuthenticationHandler"  
+                p:dataSource-ref="dataSource"  
+                p:sql="select password from member_user where name = ?"  
+                p:passwordEncoder-ref="passwordEncoder"/>
+
+    2. /WEB-INF/deployerConfigContext.xml替换
+        <entry key-ref="primaryAuthenticationHandler" value-ref="primaryPrincipalResolver" /> 替换为
+        <entry key-ref="dbAuthenticationHandler" value-ref="primaryPrincipalResolver" />
+
+    3. 添加三个jar包到/WEB-INF/lib中
+        druid-1.0.29.jar
+        mysql-connector-java-5.1.47.jar
+        cas-server-support-jdbc-4.0.0.jar
+    4. 重启测试
+
+
+七、springboot、springsecurity和cas整合
+    
+    ssm + springsecurity + cas
+    springboot + spring data jpa + xxxx + xxxx
+
+    spring boot
+    spring cloud
